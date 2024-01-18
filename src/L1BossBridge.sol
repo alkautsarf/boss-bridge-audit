@@ -37,7 +37,7 @@ contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
     error L1BossBridge__Unauthorized();
     error L1BossBridge__CallFailed();
 
-    event Deposit(address from, address to, uint256 amount);
+    event Deposit(address from, address to, uint256 amount); //ii @audit-i missing indexed fields
 
     constructor(IERC20 _token) Ownable(msg.sender) {
         token = _token;
@@ -71,7 +71,7 @@ contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
         if (token.balanceOf(address(vault)) + amount > DEPOSIT_LIMIT) {
             revert L1BossBridge__DepositLimitReached();
         }
-        token.safeTransferFrom(from, address(vault), amount);
+        token.safeTransferFrom(from, address(vault), amount); //!!! @audit-h uses arbitrary from in transferFrom //!!! @audit-h since the vault approved bridge, malicious user can infinitely mint tokens in l2
 
         // Our off-chain service picks up this event and mints the corresponding tokens on L2
         emit Deposit(from, l2Recipient, amount);
@@ -88,7 +88,7 @@ contract L1BossBridge is Ownable, Pausable, ReentrancyGuard {
      * @param r The r value of the signature
      * @param s The s value of the signature
      */
-    function withdrawTokensToL1(address to, uint256 amount, uint8 v, bytes32 r, bytes32 s) external {
+    function withdrawTokensToL1(address to, uint256 amount, uint8 v, bytes32 r, bytes32 s) external { //!!! @audit-h Signature Replay Attack
         sendToL1(
             v,
             r,

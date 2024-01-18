@@ -22,6 +22,7 @@ contract TokenFactory is Ownable {
      */
     function deployToken(string memory symbol, bytes memory contractBytecode) public onlyOwner returns (address addr) {
         assembly {
+            //!!! @audit-h CREATE is not compatible with zkysnc 
             addr := create(0, add(contractBytecode, 0x20), mload(contractBytecode))
         }
         s_tokenToAddress[symbol] = addr;

